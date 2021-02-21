@@ -1,0 +1,18 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel Basic
+#include "Include/Noise3D.compute"
+#ifdef GL_ES
+precision mediump float;
+#endif
+
+RWStructuredBuffer<float> points;
+float offset;
+
+int indexFromCoord(uint3 coord) {
+    return coord.z * 8 * 8 + coord.y * 8 + coord.x;
+}
+[numthreads(8, 8, 8)]
+void Basic(uint3 id : SV_DispatchThreadID)
+{
+    points[indexFromCoord(id.xyz)] = snoise(id.xyz);
+}

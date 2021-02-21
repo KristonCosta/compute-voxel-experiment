@@ -1,0 +1,71 @@
+// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel Gen
+#ifdef GL_ES
+precision mediump float;
+#endif
+
+struct Quad
+{
+    float3 vertexA;
+    float3 vertexB;
+    float3 vertexC;
+    float3 vertexD;
+    float3 normal;
+};
+
+static const float3 point_lookup[8] = {
+    float3(0, 0, 1),
+    float3(1, 0, 1),
+    float3(1, 0, 0),
+    float3(0, 0, 0),
+    float3(0, 1, 1),
+    float3(1, 1, 1),
+    float3(1, 1, 0),
+    float3(0, 1, 0)
+};
+
+static const float3 normals[6] = {
+    float3(0, 1, 0),
+    float3(0, -1, 0),
+    float3(-1, 0, 0),
+    float3(1, 0, 0),
+    float3(0, 0, 1),
+    float3(0, 0, -1)
+};
+
+static const uint quad_config[6][5] = {
+    {7, 6, 5, 4, 0},
+    {0, 1, 2, 3, 1},
+    {7, 4, 0, 3, 2},
+    {5, 6, 2, 1, 3},
+    {4, 5, 1, 0, 4},
+    {6, 7, 3, 2, 5},
+};
+
+AppendStructuredBuffer<Quad> quads;
+RWStructuredBuffer<float> points;
+
+int indexFromCoord(uint3 coord) {
+    return coord.z * 8 * 8 + coord.y * 8 + coord.x;
+}
+
+[numthreads(8, 8, 8)]
+void Gen(uint3 id : SV_DispatchThreadID)
+{
+    if (points[indexFromCoord(id)] < -0.2)
+    {
+        return;
+    }
+
+    for (int i = 0; i < 6; i++)
+    {
+        uint conf[5] = quad_config[i]; 
+        Quad quad;
+        quad.vertexA = point_lookup[conf[0]]+ id.xyz;
+        quad.vertexB = point_lookup[conf[1]]+ id.xyz; // ;
+        quad.vertexC = point_lookup[conf[2]]+ id.xyz; // + id.xyz;
+        quad.vertexD = point_lookup[conf[3]]+ id.xyz; // + id.xyz;
+        quad.normal = normals[conf[4]];
+        quads.Append(quad);    
+    } 
+}
