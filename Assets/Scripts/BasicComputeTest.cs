@@ -2,10 +2,18 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 public class BasicComputeTest : MonoBehaviour
 {
-    
+    enum State
+    {
+        Starting,
+        Loading,
+        Done
+    }
+
+    private State state = State.Starting; 
     public ComputeShader shader;
     public ComputeShader geomShader;
     private RenderTexture texture;
@@ -19,13 +27,13 @@ public class BasicComputeTest : MonoBehaviour
     private Vector3[] output;
 
     private GameObject[] spheres;
-
+    private AsyncGPUReadbackRequest request;
     private bool initialized = false;
     // Start is called before the first frame update
 
     public void Generate(Vector3 offset)
     {
-        int sizeOfChunk = 16;
+        int sizeOfChunk = 18;
         int numVoxels = sizeOfChunk * sizeOfChunk * sizeOfChunk;
         int maxQuadCount = numVoxels * 6;
         pointsBuffer = new ComputeBuffer(numVoxels, sizeof(float));
@@ -35,14 +43,15 @@ public class BasicComputeTest : MonoBehaviour
         shader.SetBuffer (kernel, "points", pointsBuffer);
         shader.SetInt("size_of_chunk", sizeOfChunk);
         shader.SetVector("offset", offset);
-        shader.Dispatch(kernel, sizeOfChunk/8, sizeOfChunk/8, sizeOfChunk/8);
+        var groups = Mathf.CeilToInt(sizeOfChunk / 8.0f); 
+        shader.Dispatch(kernel, groups, groups, groups);
         
         kernel = geomShader.FindKernel("Gen");
         
         geomShader.SetBuffer (kernel, "quads", quadBuffer);
         geomShader.SetBuffer (kernel, "points", pointsBuffer);
         geomShader.SetInt("size_of_chunk", sizeOfChunk);
-        geomShader.Dispatch(kernel, sizeOfChunk/8, sizeOfChunk/8, sizeOfChunk/8);
+        geomShader.Dispatch(kernel, groups, groups, groups);
         
         ComputeBuffer quadCountBuffer = new ComputeBuffer (1, sizeof (int), ComputeBufferType.Raw);
         ComputeBuffer.CopyCount (quadBuffer, quadCountBuffer, 0);
