@@ -42,30 +42,50 @@ static const uint quad_config[6][5] = {
     {6, 7, 3, 2, 5},
 };
 
+int size_of_chunk;
 AppendStructuredBuffer<Quad> quads;
 RWStructuredBuffer<float> points;
 
-int indexFromCoord(uint3 coord) {
-    return coord.z * 8 * 8 + coord.y * 8 + coord.x;
+int index_from_coord(int3 coord) {
+    return coord.z * size_of_chunk * size_of_chunk + coord.y * size_of_chunk + coord.x;
+}
+
+void process_direction(uint3 id, int dir)
+{
+    uint conf[5] = quad_config[dir];
+    float3 normal = normals[conf[4]];
+    float3 adj_block = id + normal;
+    
+    if (all(adj_block > 0) && all(adj_block < size_of_chunk)) {
+        int adjacent_index = index_from_coord(adj_block);
+        if (points[adjacent_index] > 0)
+        {
+            return;
+        }
+    }
+        
+          
+    Quad quad;
+    quad.vertexA = point_lookup[conf[0]] + id.xyz;
+    quad.vertexB = point_lookup[conf[1]] + id.xyz; 
+    quad.vertexC = point_lookup[conf[2]] + id.xyz; 
+    quad.vertexD = point_lookup[conf[3]] + id.xyz; 
+    quad.normal = normal;
+    quads.Append(quad);    
 }
 
 [numthreads(8, 8, 8)]
 void Gen(uint3 id : SV_DispatchThreadID)
 {
-    if (points[indexFromCoord(id)] < -0.2)
+    if (points[index_from_coord(id)] < 0)
     {
         return;
     }
 
-    for (int i = 0; i < 6; i++)
-    {
-        uint conf[5] = quad_config[i]; 
-        Quad quad;
-        quad.vertexA = point_lookup[conf[0]]+ id.xyz;
-        quad.vertexB = point_lookup[conf[1]]+ id.xyz; // ;
-        quad.vertexC = point_lookup[conf[2]]+ id.xyz; // + id.xyz;
-        quad.vertexD = point_lookup[conf[3]]+ id.xyz; // + id.xyz;
-        quad.normal = normals[conf[4]];
-        quads.Append(quad);    
-    } 
+    process_direction(id, 0);
+    process_direction(id, 1);
+    process_direction(id, 2);
+    process_direction(id, 3);
+    process_direction(id, 4);
+    process_direction(id, 5);
 }

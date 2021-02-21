@@ -1,18 +1,77 @@
 // Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel Basic
-#include "Include/Noise3D.compute"
+#include "Include/Noise2D.compute"
 #ifdef GL_ES
-precision mediump float;
+precision highp float;
 #endif
 
 RWStructuredBuffer<float> points;
-float offset;
+int size_of_chunk;
+float3 offset;
 
-int indexFromCoord(uint3 coord) {
-    return coord.z * 8 * 8 + coord.y * 8 + coord.x;
+float inverse_lerp(float start, float end, float value)
+{
+    if (start == end) return 1.0;
+    return clamp((value - start) / (end - start), 0.0, 1.0); 
 }
+
+float map_value(float newMin, float newMax, float originalMin, float originalMax, float value)
+{
+    return lerp(newMin, newMax, inverse_lerp(originalMin, originalMax, value));
+}
+
+float fractal_brownian_motion(float2 pos, int octave, float persistence)
+{
+    float total = 0;
+    float frequency = 1.0;
+    float amplitude = 1.0;
+    float max_value = 0;
+    float neg_offset = 32000;
+
+    for (int i = 0; i < octave; i++)
+    {
+        total += snoise(((pos + neg_offset) * frequency) * amplitude);
+        max_value += amplitude;
+        amplitude *= persistence;
+        frequency *= 2;
+    }
+
+    return total / max_value;
+}
+
+float fractal_brownian_motion_3d(float3 pos, float smoothing, int octave)
+{
+    float xy = fractal_brownian_motion(pos.xy * smoothing, octave, 0.5);
+    float yz = fractal_brownian_motion(pos.yz * smoothing, octave, 0.5);
+    float xz = fractal_brownian_motion(pos.xz * smoothing, octave, 0.5);
+
+    float yx = fractal_brownian_motion(pos.yx * smoothing, octave, 0.5);
+    float zy = fractal_brownian_motion(pos.zy * smoothing, octave, 0.5);
+    float zx = fractal_brownian_motion(pos.zx * smoothing, octave, 0.5);
+
+    return (xy + yz + xz + yx + zy + zx) / 6.0f;
+}
+
+int generate_height(float2 pos)
+{
+    return map_value(0, 5, -1, 1, fractal_brownian_motion(pos * 0.1f, 4, 0.5 ));
+}
+
+int index_from_coord(uint3 coord) {
+    return coord.z * size_of_chunk * size_of_chunk + coord.y * size_of_chunk + coord.x;
+}
+
 [numthreads(8, 8, 8)]
 void Basic(uint3 id : SV_DispatchThreadID)
 {
-    points[indexFromCoord(id.xyz)] = snoise(id.xyz);
+    float3 translated = id + offset;
+    if (id.y < generate_height(translated.xz))
+    {
+        points[index_from_coord(id.xyz)] = 1.0;    
+    }
+    else
+    {
+        points[index_from_coord(id.xyz)] = -1.0;
+    }
+     
 }
