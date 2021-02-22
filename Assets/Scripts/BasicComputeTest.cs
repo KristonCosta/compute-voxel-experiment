@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Profiling;
@@ -22,7 +23,7 @@ public class BasicComputeTest : MonoBehaviour
     private RenderTexture texture;
     public Material material;
     ComputeBuffer pointsBuffer;
-    private ComputeBuffer quadBuffer;
+    private ComputeBuffer faceInfoBuffer;
     
     private int kernel;
 
@@ -34,19 +35,24 @@ public class BasicComputeTest : MonoBehaviour
     private bool initialized = false;
 
     private bool destroyed = false;
+    
+    
+    private readonly Vector2 uv00 = new Vector2(0f, 0f);
+    private readonly Vector2  uv10 = new Vector2(1f, 0f);
+    private readonly Vector2  uv01 = new Vector2(0f, 1f);
+    private readonly Vector2  uv11 = new Vector2(1f, 1f);
     // Start is called before the first frame update
 
     public void Generate(CoroutineQueue q, Vector3 offset)
     {
         queue = q;
-        var start = Time.timeAsDouble;
         int sizeOfChunk = chunkSize + 2;
         int numVoxels = sizeOfChunk * sizeOfChunk * sizeOfChunk;
-        int maxQuadCount = numVoxels * 6;
+        int maxQuadCount = numVoxels;
         pointsBuffer = new ComputeBuffer(numVoxels, sizeof(float));
         pointsBuffer.SetCounterValue(0);
-        quadBuffer = new ComputeBuffer(maxQuadCount, sizeof(float) * 3 * 5, ComputeBufferType.Append);
-        quadBuffer.SetCounterValue(0);
+        faceInfoBuffer = new ComputeBuffer(maxQuadCount, sizeof(int) * 3 + sizeof(uint) * 2, ComputeBufferType.Append);
+        faceInfoBuffer.SetCounterValue(0);
         kernel = shader.FindKernel("Basic");
 
         shader.SetBuffer(kernel, "points", pointsBuffer);
@@ -57,59 +63,184 @@ public class BasicComputeTest : MonoBehaviour
 
         kernel = geomShader.FindKernel("Gen");
 
-        geomShader.SetBuffer(kernel, "quads", quadBuffer);
+        geomShader.SetBuffer(kernel, "face_info", faceInfoBuffer);
         geomShader.SetBuffer(kernel, "points", pointsBuffer);
         geomShader.SetInt("size_of_chunk", sizeOfChunk);
         geomShader.Dispatch(kernel, groups, groups, groups);
 
-        request = AsyncGPUReadback.Request(quadBuffer);
+        request = AsyncGPUReadback.Request(faceInfoBuffer);
         state = State.Loading;
-        var diff = Time.timeAsDouble - start;
+        
         if (destroyed)
         {
             ClearBuffers();
         }
-       // yield return null;
     }
 
     private void LoadRequest()
     {
-        var quads = request.GetData<Quad>();
+        
+        var voxels = request.GetData<FaceInfo>();
+        
         Profiler.BeginSample("LoadRequest");
         if (destroyed)
         {
             return;
         }
-        
-        var start = Time.timeAsDouble;
-        var numQuads = quads.Length;   
+
+        int num_voxels = 0;
+        uint numQuads = 0;
+        for (int i = 0; i < voxels.Length; i++)
+        {
+            if (voxels[i].num_faces == 0) break; 
+            numQuads += voxels[i].num_faces;
+            num_voxels += 1;
+        }
+
+        var p0 = new Vector3(-0.5f, -0.5f, 0.5f);
+        var p1 = new Vector3(0.5f, -0.5f, 0.5f);
+        var p2 = new Vector3(0.5f, -0.5f, -0.5f);
+        var p3 = new Vector3(-0.5f, -0.5f, -0.5f);
+        var p4 = new Vector3(-0.5f, 0.5f, 0.5f);
+        var p5 = new Vector3(0.5f, 0.5f, 0.5f);
+        var p6 = new Vector3(0.5f, 0.5f, -0.5f);
+        var p7 = new Vector3(-0.5f, 0.5f, -0.5f);
         
         var vertices = new Vector3[4*numQuads];
         var normals = new Vector3[4*numQuads];
         var uvs = new Vector2[4*numQuads];
         var meshTriangles = new int[6*numQuads];
         
-        for (int i = 0; i < numQuads; i++) {
-            for (int j = 0; j < 4; j++) {
-                vertices[i * 4 + j] = quads[i][j];
-                normals[i * 4 + j] = quads[i].normal;
-            }
-
-            var varOffset = i * 4;
-            var indexOffset = i * 6;
-            meshTriangles[indexOffset] = 3 + varOffset;
-            meshTriangles[indexOffset + 1] = 1 + varOffset;
-            meshTriangles[indexOffset + 2] = 0 + varOffset;
-            meshTriangles[indexOffset + 3] = 3 + varOffset;
-            meshTriangles[indexOffset + 4] = 2 + varOffset;
-            meshTriangles[indexOffset + 5] = 1 + varOffset;
-
-            uvs[varOffset] = Vector2.one;
-            uvs[varOffset + 1] = Vector2.up;
-            uvs[varOffset + 2] = Vector2.zero;
-            uvs[varOffset + 3] = Vector2.right;
+        var vertex_offset = 0;
+        var normal_offset = 0;
+        var uv_offset = 0;
+        var triangle_offset = 0;
+        if (num_voxels > 0)
+        {
+            Debug.Log(string.Format("Coord {0}, faces {1}, num {2}", voxels[0].coordinate, voxels[0].faces, voxels[0].num_faces));
         }
-        
+
+        int counter = 0;
+        for (int i = 0; i < num_voxels; i++)
+        {
+         
+            var voxel = voxels[i];
+            if (voxel.num_faces == 0) break;
+            
+            if ((voxel.faces & 0x1) != 0)
+            {
+                counter += 1;
+                vertices[vertex_offset] = p7 + voxel.coordinate;
+                vertices[vertex_offset + 1] = p6 + voxel.coordinate;
+                vertices[vertex_offset + 2] = p5 + voxel.coordinate;
+                vertices[vertex_offset + 3] = p4 + voxel.coordinate;
+                vertex_offset += 4;
+
+                generate_normals(normal_offset, Vector3.up, normals);
+                generate_uvs(uv_offset, uvs);
+                generate_triangles(triangle_offset, meshTriangles);
+
+                normal_offset += 4;
+                uv_offset += 4;
+                triangle_offset += 6;
+            }
+            
+                         
+            if ((voxel.faces & 0x2) != 0)
+            {
+                counter += 1;
+                vertices[vertex_offset] = p0 + voxel.coordinate;
+                vertices[vertex_offset + 1] = p1 + voxel.coordinate;
+                vertices[vertex_offset + 2] = p2 + voxel.coordinate;
+                vertices[vertex_offset + 3] = p3 + voxel.coordinate;
+                vertex_offset += 4;
+
+                generate_normals(normal_offset, Vector3.down, normals);
+                generate_uvs(uv_offset, uvs);
+                generate_triangles(triangle_offset, meshTriangles);
+
+                normal_offset += 4;
+                uv_offset += 4;
+                triangle_offset += 6;
+            }
+            
+                         
+            if ((voxel.faces & 0x4) != 0)
+            {
+                counter += 1;
+                vertices[vertex_offset] = p7 + voxel.coordinate;
+                vertices[vertex_offset + 1] = p4 + voxel.coordinate;
+                vertices[vertex_offset + 2] = p0 + voxel.coordinate;
+                vertices[vertex_offset + 3] = p3 + voxel.coordinate;
+                vertex_offset += 4;
+
+                generate_normals(normal_offset, Vector3.left, normals);
+                generate_uvs(uv_offset, uvs);
+                generate_triangles(triangle_offset, meshTriangles);
+
+                normal_offset += 4;
+                uv_offset += 4;
+                triangle_offset += 6;
+            }
+            
+                         
+            if ((voxel.faces & 0x8) != 0)
+            {
+                counter += 1;
+                vertices[vertex_offset] = p5 + voxel.coordinate;
+                vertices[vertex_offset + 1] = p6 + voxel.coordinate;
+                vertices[vertex_offset + 2] = p2 + voxel.coordinate;
+                vertices[vertex_offset + 3] = p1 + voxel.coordinate;
+                vertex_offset += 4;
+
+                generate_normals(normal_offset, Vector3.right, normals);
+                generate_uvs(uv_offset, uvs);
+                generate_triangles(triangle_offset, meshTriangles);
+
+                normal_offset += 4;
+                uv_offset += 4;
+                triangle_offset += 6;
+            }
+            
+                         
+            if ((voxel.faces & 0x10) != 0)
+            {
+                counter += 1;
+                vertices[vertex_offset] = p4 + voxel.coordinate;
+                vertices[vertex_offset + 1] = p5 + voxel.coordinate;
+                vertices[vertex_offset + 2] = p1 + voxel.coordinate;
+                vertices[vertex_offset + 3] = p0 + voxel.coordinate;
+                vertex_offset += 4;
+
+                generate_normals(normal_offset, Vector3.forward, normals);
+                generate_uvs(uv_offset, uvs);
+                generate_triangles(triangle_offset, meshTriangles);
+
+                normal_offset += 4;
+                uv_offset += 4;
+                triangle_offset += 6;
+            }
+            
+                         
+            if ((voxel.faces & 0x20) != 0)
+            {
+                counter += 1;
+                vertices[vertex_offset] = p6 + voxel.coordinate;
+                vertices[vertex_offset + 1] = p7 + voxel.coordinate;
+                vertices[vertex_offset + 2] = p3 + voxel.coordinate;
+                vertices[vertex_offset + 3] = p2 + voxel.coordinate;
+                vertex_offset += 4;
+
+                generate_normals(normal_offset, Vector3.back, normals);
+                generate_uvs(uv_offset, uvs);
+                generate_triangles(triangle_offset, meshTriangles);
+
+                normal_offset += 4;
+                uv_offset += 4;
+                triangle_offset += 6;
+            }
+        }
+        Debug.Log(string.Format("Counter {0}", counter));
         var quad = new GameObject("quad");
         quad.transform.parent = transform;
         quad.transform.position = transform.position;
@@ -122,31 +253,52 @@ public class BasicComputeTest : MonoBehaviour
         mesh.RecalculateBounds();
         
         var filter = quad.AddComponent<MeshFilter>();
-       // var renderer = quad.AddComponent<MeshRenderer>();
-       // mesh.OptimizeIndexBuffers();
+        var renderer = quad.AddComponent<MeshRenderer>();
+        
         filter.mesh = mesh;
         
        // renderer.shadowCastingMode = ShadowCastingMode.On;
-       // renderer.material = material;
+        renderer.material = material;
         state = State.Done;
         Profiler.EndSample();
-        return;
     }
 
+    private void generate_normals(int offset, Vector3 dir, Vector3[] normals)
+    {
+        for (int n = 0; n < 4; n++)
+        {
+            normals[offset + n] = Vector3.up;
+        }
+    }
+
+    private void generate_uvs(int offset, Vector2[] uvs)
+    {
+        uvs[offset] = uv11;
+        uvs[offset + 1] = uv01;
+        uvs[offset + 2] = uv00;
+        uvs[offset + 3] = uv10;
+    }
     
-    
+    private void generate_triangles(int offset, int[] triangles)
+    {
+        triangles[offset] = 3;
+        triangles[offset + 1] = 1;
+        triangles[offset + 2] = 0;
+        triangles[offset + 3] = 3;
+        triangles[offset + 4] = 2;
+        triangles[offset + 5] = 1;
+    }
     
     public void ClearBuffers()
     {
         pointsBuffer?.Release();
-        quadBuffer?.Release();
+        faceInfoBuffer?.Release();
     }
 
     private void OnDisable()
     {
         destroyed = true;
-        pointsBuffer?.Release();
-        quadBuffer?.Release();
+        ClearBuffers();
     }
 
     private void Update()
@@ -154,11 +306,8 @@ public class BasicComputeTest : MonoBehaviour
         if (state == State.Done) return;
         if (state == State.Loading && request.done && !request.hasError)
         {
-            
-            
             LoadRequest();
-            pointsBuffer.Dispose();
-            quadBuffer.Dispose();
+            ClearBuffers();
             state = State.Done;
         } else if (state == State.Loading && request.hasError)
         {
@@ -170,8 +319,9 @@ public class BasicComputeTest : MonoBehaviour
 
     struct FaceInfo
     {
-        public Vector3 coordinate;
+        public Vector3Int coordinate;
         public uint faces;
+        public uint num_faces;
     }
     
     struct Quad

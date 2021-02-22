@@ -4,26 +4,6 @@
 precision mediump float;
 #endif
 
-struct Quad
-{
-    float3 vertexA;
-    float3 vertexB;
-    float3 vertexC;
-    float3 vertexD;
-    float3 normal;
-};
-
-static const float3 point_lookup[8] = {
-    float3(0, 0, 1),
-    float3(1, 0, 1),
-    float3(1, 0, 0),
-    float3(0, 0, 0),
-    float3(0, 1, 1),
-    float3(1, 1, 1),
-    float3(1, 1, 0),
-    float3(0, 1, 0)
-};
-
 static const float3 normals[6] = {
     float3(0, 1, 0),
     float3(0, -1, 0),
@@ -49,50 +29,27 @@ static const uint face_conf[6] = {
     0x8,
     0x10,
     0x20
+    
 };
 
 struct FaceInfo
 {
-    float3 coord;
+    uint3 coord;
     uint visible_faces;
+    uint num_faces;
 };
 
 int size_of_chunk;
-AppendStructuredBuffer<Quad> quads;
-AppendStructuredBuffer<uint> face_info;
+AppendStructuredBuffer<FaceInfo> face_info;
 RWStructuredBuffer<float> points;
 
 int index_from_coord(int3 coord) {
     return coord.z * size_of_chunk * size_of_chunk + coord.y * size_of_chunk + coord.x;
 }
 
-void process_direction(uint3 id, int dir)
+FaceInfo add_direction_if_valid(uint3 id, int dir, FaceInfo current_val)
 {
-    uint conf[5] = quad_config[dir];
-    float3 normal = normals[conf[4]];
-    float3 adj_block = id + normal;
-    
-    if (all(adj_block >= 0) && all(adj_block < size_of_chunk)) {
-        int adjacent_index = index_from_coord(adj_block);
-        if (points[adjacent_index] > 0)
-        {
-            return;
-        }
-    }
-        
-    Quad quad;
-    quad.vertexA = point_lookup[conf[0]] + id.xyz;
-    quad.vertexB = point_lookup[conf[1]] + id.xyz; 
-    quad.vertexC = point_lookup[conf[2]] + id.xyz; 
-    quad.vertexD = point_lookup[conf[3]] + id.xyz; 
-    quad.normal = normal;
-    quads.Append(quad);    
-}
-
-uint add_direction_if_valid(uint3 id, int dir, uint current_val)
-{
-    uint conf[5] = quad_config[dir];
-    float3 normal = normals[conf[4]];
+    float3 normal = normals[dir];
     float3 adj_block = id + normal;
     
     if (all(adj_block >= 0) && all(adj_block < size_of_chunk)) {
@@ -102,8 +59,9 @@ uint add_direction_if_valid(uint3 id, int dir, uint current_val)
             return current_val;
         }
     }
-
-    return current_val | face_conf[dir];
+    current_val.visible_faces |= face_conf[dir];
+    current_val.num_faces += 1;
+    return current_val;
 }
 
 [numthreads(8, 8, 8)]
@@ -117,16 +75,20 @@ void Gen(uint3 id : SV_DispatchThreadID)
     {
         return;
     }
-    uint dir_info = 0x0;
-    dir_info = add_direction_if_valid(id, 0, dir_info);
-    dir_info = add_direction_if_valid(id, 1, dir_info);
-    dir_info = add_direction_if_valid(id, 2, dir_info);
-    dir_info = add_direction_if_valid(id, 3, dir_info);
-    dir_info = add_direction_if_valid(id, 4, dir_info);
-    dir_info = add_direction_if_valid(id, 5, dir_info);
-
     FaceInfo info;
     info.coord = id;
-    info.visible_faces = dir_info;
+    info.num_faces = 0;
+    info.visible_faces = 0x0;
+    info = add_direction_if_valid(id, 0, info);
+    info = add_direction_if_valid(id, 1, info);
+    info = add_direction_if_valid(id, 2, info);
+    info = add_direction_if_valid(id, 3, info);
+    info = add_direction_if_valid(id, 4, info);
+    info = add_direction_if_valid(id, 5, info);
+
+    if (info.num_faces == 0)
+    {
+        return;
+    }
     face_info.Append(info);
 }
