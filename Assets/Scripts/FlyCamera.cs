@@ -1,6 +1,8 @@
+using System;
 using UnityEngine;
 using System.Collections;
- 
+using UnityEngine.InputSystem;
+
 public class FlyCamera : MonoBehaviour {
  
     /*
@@ -19,40 +21,50 @@ public class FlyCamera : MonoBehaviour {
     float camSens = 0.25f; //How sensitive it with mouse
     private Vector3 lastMouse = new Vector3(255, 255, 255); //kind of in the middle of the screen, rather than at the top (play)
     private float totalRun= 1.0f;
-     
+
+    public float climbSpeed = 4;
+    public float slowMoveFactor = 0.25f;
+    public float normalMoveSpeed = 10;
+    public float fastMoveFactor = 3;
+    public float cameraSensitivity = 90;
+    private float rotationX = 0.0f;
+    private float rotationY = 0.0f;
+    private void Awake()
+    {
+        Cursor.lockState = CursorLockMode.Locked;
+    }
+
     void Update () {
-        lastMouse = Input.mousePosition - lastMouse ;
-        lastMouse = new Vector3(-lastMouse.y * camSens, lastMouse.x * camSens, 0 );
-        lastMouse = new Vector3(transform.eulerAngles.x + lastMouse.x , transform.eulerAngles.y + lastMouse.y, 0);
-        transform.eulerAngles = lastMouse;
-        lastMouse =  Input.mousePosition;
-        //Mouse  camera angle done.  
-       
-        //Keyboard commands
-        float f = 0.0f;
-        Vector3 p = GetBaseInput();
-        if (Input.GetKey (KeyCode.LeftShift)){
-            totalRun += Time.deltaTime;
-            p  = p * totalRun * shiftAdd;
-            p.x = Mathf.Clamp(p.x, -maxShift, maxShift);
-            p.y = Mathf.Clamp(p.y, -maxShift, maxShift);
-            p.z = Mathf.Clamp(p.z, -maxShift, maxShift);
+        rotationX += Input.GetAxis("Mouse X") * cameraSensitivity * Time.deltaTime;
+        rotationY += Input.GetAxis("Mouse Y") * cameraSensitivity * Time.deltaTime;
+        rotationY = Mathf.Clamp (rotationY, -90, 90);
+ 
+        transform.localRotation = Quaternion.AngleAxis(rotationX, Vector3.up);
+        transform.localRotation *= Quaternion.AngleAxis(rotationY, Vector3.left);
+ 
+        if (Input.GetKey (KeyCode.LeftShift) || Input.GetKey (KeyCode.RightShift))
+        {
+            transform.position += transform.forward * (normalMoveSpeed * fastMoveFactor * Input.GetAxis("Vertical") * Time.deltaTime);
+            transform.position += transform.right * (normalMoveSpeed * fastMoveFactor * Input.GetAxis("Horizontal") * Time.deltaTime);
         }
-        else{
-            totalRun = Mathf.Clamp(totalRun * 0.5f, 1f, 1000f);
-            p = p * mainSpeed;
+        else if (Input.GetKey (KeyCode.LeftControl) || Input.GetKey (KeyCode.RightControl))
+        {
+            transform.position += transform.forward * (normalMoveSpeed * slowMoveFactor * Input.GetAxis("Vertical") * Time.deltaTime);
+            transform.position += transform.right * (normalMoveSpeed * slowMoveFactor * Input.GetAxis("Horizontal") * Time.deltaTime);
         }
-       
-        p = p * Time.deltaTime;
-       Vector3 newPosition = transform.position;
-        if (Input.GetKey(KeyCode.Space)){ //If player wants to move on X and Z axis only
-            transform.Translate(p);
-            newPosition.x = transform.position.x;
-            newPosition.z = transform.position.z;
-            transform.position = newPosition;
+        else
+        {
+            transform.position += transform.forward * (normalMoveSpeed * Input.GetAxis("Vertical") * Time.deltaTime);
+            transform.position += transform.right * (normalMoveSpeed * Input.GetAxis("Horizontal") * Time.deltaTime);
         }
-        else{
-            transform.Translate(p);
+ 
+ 
+        if (Input.GetKey (KeyCode.Q)) {transform.position += transform.up * (climbSpeed * Time.deltaTime);}
+        if (Input.GetKey (KeyCode.E)) {transform.position -= transform.up * (climbSpeed * Time.deltaTime);}
+ 
+        if (Input.GetKeyDown (KeyCode.End))
+        {
+            Cursor.lockState = CursorLockMode.None;
         }
        
     }

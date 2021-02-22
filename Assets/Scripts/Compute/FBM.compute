@@ -6,7 +6,8 @@ precision highp float;
 #endif
 
 RWStructuredBuffer<float> points;
-int size_of_chunk;
+uint size_of_chunk;
+uint height_of_chunk;
 float3 offset;
 
 float inverse_lerp(float start, float end, float value)
@@ -57,19 +58,19 @@ int generate_height(float2 pos)
     return map_value(60, 150, 0, 1, fractal_brownian_motion(pos * 0.01f, 4, 0.5 ));
 }
 
-int index_from_coord(uint3 coord) {
-    return coord.z * size_of_chunk * size_of_chunk + coord.y * size_of_chunk + coord.x;
+uint index_from_coord(uint3 coord) {
+    return coord.z * height_of_chunk * size_of_chunk + coord.y * size_of_chunk + coord.x;
 }
 
 [numthreads(8, 8, 8)]
 void Basic(uint3 id : SV_DispatchThreadID)
 {
-    if (any(id >= size_of_chunk)) {
+    if (id.x >= size_of_chunk || id.z >= size_of_chunk || id.y >= height_of_chunk) {
         return;
     }
     float3 translated = id + offset;
     float result = -1.0;
- //   result = fractal_brownian_motion_3d(translated, 0.1, 3) < 0.42f ? 0.0 : result;
+    result = fractal_brownian_motion_3d(translated, 0.1, 3) < 0.42f ? 0.0 : result;
     result = result < 0.0 && translated.y < generate_height(translated.xz) ? 1.0 : 0.0;
     points[index_from_coord(id)] = result;
 }

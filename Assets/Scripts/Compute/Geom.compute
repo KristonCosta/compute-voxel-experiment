@@ -39,12 +39,13 @@ struct FaceInfo
     uint num_faces;
 };
 
-int size_of_chunk;
+uint size_of_chunk;
 AppendStructuredBuffer<FaceInfo> face_info;
 RWStructuredBuffer<float> points;
+uint height_of_chunk;
 
-int index_from_coord(int3 coord) {
-    return coord.z * size_of_chunk * size_of_chunk + coord.y * size_of_chunk + coord.x;
+uint index_from_coord(uint3 coord) {
+    return coord.z * height_of_chunk * size_of_chunk + coord.y * size_of_chunk + coord.x;
 }
 
 FaceInfo add_direction_if_valid(uint3 id, int dir, FaceInfo current_val)
@@ -52,7 +53,10 @@ FaceInfo add_direction_if_valid(uint3 id, int dir, FaceInfo current_val)
     float3 normal = normals[dir];
     float3 adj_block = id + normal;
     
-    if (all(adj_block >= 0) && all(adj_block < size_of_chunk)) {
+    if (all(adj_block >= 0) &&
+        adj_block.x < size_of_chunk &&
+        adj_block.z < size_of_chunk &&
+        adj_block.y < height_of_chunk) {
         int adjacent_index = index_from_coord(adj_block);
         if (points[adjacent_index] > 0)
         {
@@ -67,14 +71,18 @@ FaceInfo add_direction_if_valid(uint3 id, int dir, FaceInfo current_val)
 [numthreads(8, 8, 8)]
 void Gen(uint3 id : SV_DispatchThreadID)
 {
-    if (any(id >= size_of_chunk - 1) || any(id <= 0)) {
+    if (id.x >= size_of_chunk - 1 ||
+        id.z >= size_of_chunk - 1 ||
+        id.y >= height_of_chunk - 1 ||
+        any(id <= 0)) {
         return;
     }
-    
-    if (points[index_from_coord(id)] <= 0.0)
+
+    if (points[index_from_coord(id)] <= 0)
     {
         return;
     }
+ 
     FaceInfo info;
     info.coord = id;
     info.num_faces = 0;
@@ -86,9 +94,11 @@ void Gen(uint3 id : SV_DispatchThreadID)
     info = add_direction_if_valid(id, 4, info);
     info = add_direction_if_valid(id, 5, info);
 
-    if (info.num_faces == 0)
+
+    if (info.num_faces <= 0)
     {
         return;
     }
+    
     face_info.Append(info);
 }
