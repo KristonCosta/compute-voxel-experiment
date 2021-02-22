@@ -42,8 +42,24 @@ static const uint quad_config[6][5] = {
     {6, 7, 3, 2, 5},
 };
 
+static const uint face_conf[6] = {
+    0x1,
+    0x2,
+    0x4,
+    0x8,
+    0x10,
+    0x20
+};
+
+struct FaceInfo
+{
+    float3 coord;
+    uint visible_faces;
+};
+
 int size_of_chunk;
 AppendStructuredBuffer<Quad> quads;
+AppendStructuredBuffer<uint> face_info;
 RWStructuredBuffer<float> points;
 
 int index_from_coord(int3 coord) {
@@ -73,6 +89,23 @@ void process_direction(uint3 id, int dir)
     quads.Append(quad);    
 }
 
+uint add_direction_if_valid(uint3 id, int dir, uint current_val)
+{
+    uint conf[5] = quad_config[dir];
+    float3 normal = normals[conf[4]];
+    float3 adj_block = id + normal;
+    
+    if (all(adj_block >= 0) && all(adj_block < size_of_chunk)) {
+        int adjacent_index = index_from_coord(adj_block);
+        if (points[adjacent_index] > 0)
+        {
+            return current_val;
+        }
+    }
+
+    return current_val | face_conf[dir];
+}
+
 [numthreads(8, 8, 8)]
 void Gen(uint3 id : SV_DispatchThreadID)
 {
@@ -84,11 +117,16 @@ void Gen(uint3 id : SV_DispatchThreadID)
     {
         return;
     }
+    uint dir_info = 0x0;
+    dir_info = add_direction_if_valid(id, 0, dir_info);
+    dir_info = add_direction_if_valid(id, 1, dir_info);
+    dir_info = add_direction_if_valid(id, 2, dir_info);
+    dir_info = add_direction_if_valid(id, 3, dir_info);
+    dir_info = add_direction_if_valid(id, 4, dir_info);
+    dir_info = add_direction_if_valid(id, 5, dir_info);
 
-    process_direction(id, 0);
-    process_direction(id, 1);
-    process_direction(id, 2);
-    process_direction(id, 3);
-    process_direction(id, 4);
-    process_direction(id, 5);
+    FaceInfo info;
+    info.coord = id;
+    info.visible_faces = dir_info;
+    face_info.Append(info);
 }

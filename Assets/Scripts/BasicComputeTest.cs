@@ -21,7 +21,6 @@ public class BasicComputeTest : MonoBehaviour
     public ComputeShader geomShader;
     private RenderTexture texture;
     public Material material;
-    private Quad[] quads;
     ComputeBuffer pointsBuffer;
     private ComputeBuffer quadBuffer;
     
@@ -75,6 +74,7 @@ public class BasicComputeTest : MonoBehaviour
 
     private void LoadRequest()
     {
+        var quads = request.GetData<Quad>();
         Profiler.BeginSample("LoadRequest");
         if (destroyed)
         {
@@ -133,6 +133,9 @@ public class BasicComputeTest : MonoBehaviour
         return;
     }
 
+    
+    
+    
     public void ClearBuffers()
     {
         pointsBuffer?.Release();
@@ -151,10 +154,11 @@ public class BasicComputeTest : MonoBehaviour
         if (state == State.Done) return;
         if (state == State.Loading && request.done && !request.hasError)
         {
-            quads = request.GetData<Quad>().ToArray();
+            
+            
+            LoadRequest();
             pointsBuffer.Dispose();
             quadBuffer.Dispose();
-            LoadRequest();
             state = State.Done;
         } else if (state == State.Loading && request.hasError)
         {
@@ -164,6 +168,12 @@ public class BasicComputeTest : MonoBehaviour
         
     }
 
+    struct FaceInfo
+    {
+        public Vector3 coordinate;
+        public uint faces;
+    }
+    
     struct Quad
     {
         public Vector3 a;
