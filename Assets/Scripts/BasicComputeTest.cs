@@ -134,12 +134,12 @@ public class BasicComputeTest : MonoBehaviour
                 vertices[vertex_offset + 1] = p6 + voxel.coordinate;
                 vertices[vertex_offset + 2] = p5 + voxel.coordinate;
                 vertices[vertex_offset + 3] = p4 + voxel.coordinate;
-                vertex_offset += 4;
-
+                
                 generate_normals(normal_offset, Vector3.up, normals);
                 generate_uvs(uv_offset, uvs);
-                generate_triangles(triangle_offset, meshTriangles);
+                generate_triangles(triangle_offset, vertex_offset,meshTriangles);
 
+                vertex_offset += 4;
                 normal_offset += 4;
                 uv_offset += 4;
                 triangle_offset += 6;
@@ -152,13 +152,13 @@ public class BasicComputeTest : MonoBehaviour
                 vertices[vertex_offset] = p0 + voxel.coordinate;
                 vertices[vertex_offset + 1] = p1 + voxel.coordinate;
                 vertices[vertex_offset + 2] = p2 + voxel.coordinate;
-                vertices[vertex_offset + 3] = p3 + voxel.coordinate;
-                vertex_offset += 4;
+                vertices[vertex_offset + 3] = p3 + voxel.coordinate;      
 
                 generate_normals(normal_offset, Vector3.down, normals);
                 generate_uvs(uv_offset, uvs);
-                generate_triangles(triangle_offset, meshTriangles);
+                generate_triangles(triangle_offset, vertex_offset,meshTriangles);
 
+                vertex_offset += 4;
                 normal_offset += 4;
                 uv_offset += 4;
                 triangle_offset += 6;
@@ -172,12 +172,12 @@ public class BasicComputeTest : MonoBehaviour
                 vertices[vertex_offset + 1] = p4 + voxel.coordinate;
                 vertices[vertex_offset + 2] = p0 + voxel.coordinate;
                 vertices[vertex_offset + 3] = p3 + voxel.coordinate;
-                vertex_offset += 4;
 
                 generate_normals(normal_offset, Vector3.left, normals);
                 generate_uvs(uv_offset, uvs);
-                generate_triangles(triangle_offset, meshTriangles);
+                generate_triangles(triangle_offset, vertex_offset,meshTriangles);
 
+                vertex_offset += 4;
                 normal_offset += 4;
                 uv_offset += 4;
                 triangle_offset += 6;
@@ -191,12 +191,12 @@ public class BasicComputeTest : MonoBehaviour
                 vertices[vertex_offset + 1] = p6 + voxel.coordinate;
                 vertices[vertex_offset + 2] = p2 + voxel.coordinate;
                 vertices[vertex_offset + 3] = p1 + voxel.coordinate;
-                vertex_offset += 4;
 
                 generate_normals(normal_offset, Vector3.right, normals);
                 generate_uvs(uv_offset, uvs);
-                generate_triangles(triangle_offset, meshTriangles);
+                generate_triangles(triangle_offset, vertex_offset,meshTriangles);
 
+                vertex_offset += 4;
                 normal_offset += 4;
                 uv_offset += 4;
                 triangle_offset += 6;
@@ -210,12 +210,12 @@ public class BasicComputeTest : MonoBehaviour
                 vertices[vertex_offset + 1] = p5 + voxel.coordinate;
                 vertices[vertex_offset + 2] = p1 + voxel.coordinate;
                 vertices[vertex_offset + 3] = p0 + voxel.coordinate;
-                vertex_offset += 4;
 
                 generate_normals(normal_offset, Vector3.forward, normals);
                 generate_uvs(uv_offset, uvs);
-                generate_triangles(triangle_offset, meshTriangles);
+                generate_triangles(triangle_offset, vertex_offset,meshTriangles);
 
+                vertex_offset += 4;
                 normal_offset += 4;
                 uv_offset += 4;
                 triangle_offset += 6;
@@ -229,12 +229,12 @@ public class BasicComputeTest : MonoBehaviour
                 vertices[vertex_offset + 1] = p7 + voxel.coordinate;
                 vertices[vertex_offset + 2] = p3 + voxel.coordinate;
                 vertices[vertex_offset + 3] = p2 + voxel.coordinate;
-                vertex_offset += 4;
 
                 generate_normals(normal_offset, Vector3.back, normals);
                 generate_uvs(uv_offset, uvs);
-                generate_triangles(triangle_offset, meshTriangles);
+                generate_triangles(triangle_offset, vertex_offset,meshTriangles);
 
+                vertex_offset += 4;
                 normal_offset += 4;
                 uv_offset += 4;
                 triangle_offset += 6;
@@ -257,7 +257,7 @@ public class BasicComputeTest : MonoBehaviour
         
         filter.mesh = mesh;
         
-       // renderer.shadowCastingMode = ShadowCastingMode.On;
+        renderer.shadowCastingMode = ShadowCastingMode.On;
         renderer.material = material;
         state = State.Done;
         Profiler.EndSample();
@@ -279,14 +279,14 @@ public class BasicComputeTest : MonoBehaviour
         uvs[offset + 3] = uv10;
     }
     
-    private void generate_triangles(int offset, int[] triangles)
+    private void generate_triangles(int offset, int vert_offset, int[] triangles)
     {
-        triangles[offset] = 3;
-        triangles[offset + 1] = 1;
-        triangles[offset + 2] = 0;
-        triangles[offset + 3] = 3;
-        triangles[offset + 4] = 2;
-        triangles[offset + 5] = 1;
+        triangles[offset] = 3 + vert_offset;
+        triangles[offset + 1] = 1 + vert_offset;
+        triangles[offset + 2] = 0 + vert_offset;
+        triangles[offset + 3] = 3 + vert_offset;
+        triangles[offset + 4] = 2 + vert_offset;
+        triangles[offset + 5] = 1 + vert_offset;
     }
     
     public void ClearBuffers()
