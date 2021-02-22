@@ -1,58 +1,85 @@
+using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
+using UnityEngine.Profiling;
 
 public class World : MonoBehaviour
 {
     public GameObject obj;
     public GameObject player;
     public Vector3Int playerChunk;
-    public ConcurrentDictionary<Vector3Int, GameObject> chunks = new ConcurrentDictionary<Vector3Int, GameObject>();
-    
+    public Dictionary<Vector3Int, GameObject> chunks = new Dictionary<Vector3Int, GameObject>();
+    private CoroutineQueue queue;
+    private const int radius = 1;
     IEnumerator Gogo()
     {
-        for (int i = -5; i <= 5; i++)
+        
+        var old = chunks.Keys.ToList();
+        var currentChunks = new HashSet<Vector3Int>();
+        for (int i = -radius; i <= radius; i++)
         {
-            for (int j = -5; j <= 5; j++)
+            
+            for (int j = -radius; j <= radius; j++)
             {
-                for (int y = -3; y < 3; y++)
+                Profiler.BeginSample("Gogo");
+                for (int y = -radius; y < radius; y++)
                 {
                     var position = new Vector3Int(i, y, j) + playerChunk;
-
+                    currentChunks.Add(position);
                     if (chunks.ContainsKey(position))
                     {
                         continue;
                     }
 
                     GameObject chunk = Instantiate(obj);
-                    chunks.TryAdd(position, chunk);
-                    position *= 16;
+                    chunks.Add(position, chunk);
+                    position *= BasicComputeTest.chunkSize;
                     chunk.transform.position = position;
-                    chunk.GetComponent<BasicComputeTest>().Generate(position);
-                    Debug.Log("Generating " + position.ToString());
+                    chunk.GetComponent<BasicComputeTest>().Generate(queue, position);
+                    
                 }
-                yield return null;    
+                Profiler.EndSample();
+                yield return null;
+                
+                          
             }
             
+            
         }
+        
+        foreach (var key in old)
+        {
+            if (!currentChunks.Contains(key))
+            {
+                if (chunks.ContainsKey(key))
+                {
+                    chunks[key].GetComponent<BasicComputeTest>().ClearBuffers();
+                    Destroy(chunks[key]);
+                    chunks.Remove(key);    
+                }
+            }
+        }
+        yield return null;
     }
-    
-    // Start is called before the first frame update
-    void Start()
+
+    private void Start()
     {
-        StartCoroutine(Gogo());
+        queue = new CoroutineQueue(2, StartCoroutine);
     }
 
     void Generate()
-    {
+    { 
+        StopCoroutine("Gogo");
         StartCoroutine(Gogo());
     }
 
     Vector3Int positionToChunk(Vector3 position)
     {
         Vector3 chunkPos = new Vector3(position.x, position.y, position.z);
-        chunkPos /= 16.0f;
+        chunkPos /= (float)(BasicComputeTest.chunkSize);
         chunkPos.x = Mathf.Floor(chunkPos.x);
         chunkPos.y = Mathf.Floor(chunkPos.y);
         chunkPos.z = Mathf.Floor(chunkPos.z);

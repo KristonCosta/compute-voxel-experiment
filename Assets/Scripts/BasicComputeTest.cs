@@ -1,7 +1,9 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Collections;
 using UnityEngine;
+using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 
 public class BasicComputeTest : MonoBehaviour
@@ -13,12 +15,13 @@ public class BasicComputeTest : MonoBehaviour
         Done
     }
 
+    public const int chunkSize = 32;
     private State state = State.Starting; 
     public ComputeShader shader;
     public ComputeShader geomShader;
     private RenderTexture texture;
     public Material material;
-
+    private Quad[] quads;
     ComputeBuffer pointsBuffer;
     private ComputeBuffer quadBuffer;
     
@@ -28,40 +31,59 @@ public class BasicComputeTest : MonoBehaviour
 
     private GameObject[] spheres;
     private AsyncGPUReadbackRequest request;
+    private CoroutineQueue queue;
     private bool initialized = false;
+
+    private bool destroyed = false;
     // Start is called before the first frame update
 
-    public void Generate(Vector3 offset)
+    public void Generate(CoroutineQueue q, Vector3 offset)
     {
-        int sizeOfChunk = 18;
+        queue = q;
+        var start = Time.timeAsDouble;
+        int sizeOfChunk = chunkSize + 2;
         int numVoxels = sizeOfChunk * sizeOfChunk * sizeOfChunk;
         int maxQuadCount = numVoxels * 6;
         pointsBuffer = new ComputeBuffer(numVoxels, sizeof(float));
-        quadBuffer = new ComputeBuffer (maxQuadCount, sizeof (float) * 3 * 5, ComputeBufferType.Append);
+        pointsBuffer.SetCounterValue(0);
+        quadBuffer = new ComputeBuffer(maxQuadCount, sizeof(float) * 3 * 5, ComputeBufferType.Append);
+        quadBuffer.SetCounterValue(0);
         kernel = shader.FindKernel("Basic");
-        
-        shader.SetBuffer (kernel, "points", pointsBuffer);
+
+        shader.SetBuffer(kernel, "points", pointsBuffer);
         shader.SetInt("size_of_chunk", sizeOfChunk);
         shader.SetVector("offset", offset);
-        var groups = Mathf.CeilToInt(sizeOfChunk / 8.0f); 
+        var groups = Mathf.CeilToInt(sizeOfChunk / 8.0f);
         shader.Dispatch(kernel, groups, groups, groups);
-        
+
         kernel = geomShader.FindKernel("Gen");
-        
-        geomShader.SetBuffer (kernel, "quads", quadBuffer);
-        geomShader.SetBuffer (kernel, "points", pointsBuffer);
+
+        geomShader.SetBuffer(kernel, "quads", quadBuffer);
+        geomShader.SetBuffer(kernel, "points", pointsBuffer);
         geomShader.SetInt("size_of_chunk", sizeOfChunk);
         geomShader.Dispatch(kernel, groups, groups, groups);
+
+        request = AsyncGPUReadback.Request(quadBuffer);
+        state = State.Loading;
+        var diff = Time.timeAsDouble - start;
+        if (destroyed)
+        {
+            ClearBuffers();
+        }
+       // yield return null;
+    }
+
+    private void LoadRequest()
+    {
+        Profiler.BeginSample("LoadRequest");
+        if (destroyed)
+        {
+            return;
+        }
         
-        ComputeBuffer quadCountBuffer = new ComputeBuffer (1, sizeof (int), ComputeBufferType.Raw);
-        ComputeBuffer.CopyCount (quadBuffer, quadCountBuffer, 0);
-        int[] quadCountArray = { 0 };
-        quadCountBuffer.GetData (quadCountArray);
-        int numQuads = quadCountArray[0];
+        var start = Time.timeAsDouble;
+        var numQuads = quads.Length;   
         
-        Quad[] quads = new Quad[numQuads];
-        quadBuffer.GetData(quads, 0, 0, numQuads);
-            
         var vertices = new Vector3[4*numQuads];
         var normals = new Vector3[4*numQuads];
         var uvs = new Vector2[4*numQuads];
@@ -98,12 +120,48 @@ public class BasicComputeTest : MonoBehaviour
         mesh.uv = uvs;
         
         mesh.RecalculateBounds();
-            
+        
         var filter = quad.AddComponent<MeshFilter>();
-        var renderer = quad.AddComponent<MeshRenderer>();
-
+       // var renderer = quad.AddComponent<MeshRenderer>();
+       // mesh.OptimizeIndexBuffers();
         filter.mesh = mesh;
-        renderer.material = material;
+        
+       // renderer.shadowCastingMode = ShadowCastingMode.On;
+       // renderer.material = material;
+        state = State.Done;
+        Profiler.EndSample();
+        return;
+    }
+
+    public void ClearBuffers()
+    {
+        pointsBuffer?.Release();
+        quadBuffer?.Release();
+    }
+
+    private void OnDisable()
+    {
+        destroyed = true;
+        pointsBuffer?.Release();
+        quadBuffer?.Release();
+    }
+
+    private void Update()
+    {
+        if (state == State.Done) return;
+        if (state == State.Loading && request.done && !request.hasError)
+        {
+            quads = request.GetData<Quad>().ToArray();
+            pointsBuffer.Dispose();
+            quadBuffer.Dispose();
+            LoadRequest();
+            state = State.Done;
+        } else if (state == State.Loading && request.hasError)
+        {
+            Debug.LogError("Request had an error");
+            
+        }
+        
     }
 
     struct Quad
