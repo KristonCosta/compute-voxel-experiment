@@ -1,13 +1,12 @@
-using System;
 using System.Collections;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using Priority_Queue;
 using UnityEngine;
-using UnityEngine.Profiling;
 
 public class World : MonoBehaviour
 {
+    
     public GameObject obj;
     public GameObject player;
     public Vector3Int playerChunk;
@@ -16,10 +15,9 @@ public class World : MonoBehaviour
     private CoroutineQueue queue;
     
     private const int radius = 10;
-    IEnumerator Gogo()
+    IEnumerator Reload()
     {
-        
-        var chunkQueue = new SortedList();
+        var chunkQueue = new SimplePriorityQueue<Vector3Int, int>();
         var old = chunks.Keys.ToList();
         var currentChunks = new HashSet<Vector3Int>();
         for (int i = -radius; i <= radius; i++)
@@ -29,9 +27,9 @@ public class World : MonoBehaviour
             {
                     var rad = new Vector3Int(i, 0, j);
                     var pos = rad + playerChunk;
-                    pos *= BasicComputeTest.chunkSize;
+                    pos *= Chunk.chunkSize;
                     currentChunks.Add(pos);
-                    chunkQueue.Add(pos.sqrMagnitude, pos);
+                    chunkQueue.Enqueue(rad, rad.sqrMagnitude);
             }
         }
 
@@ -43,57 +41,45 @@ public class World : MonoBehaviour
                 chunks.Remove(key);
             }
         }
-
-        int index = 0;
-        while (index < chunkQueue.Count)
+        
+        while (chunkQueue.Count > 0)
         {
             
-        }
-
-        for (int i = -radius; i <= radius; i++)
-        {
-            
-            for (int j = -radius; j <= radius; j++)
+            var pos = chunkQueue.Dequeue();
+            if (pos.sqrMagnitude > radius * radius)
             {
-                    var pos = new Vector3Int(i, 0, j);
-                    if (pos.sqrMagnitude > radius * radius)
-                    {
-                        continue;
-                    }
+                continue;
+            }
 
-                    pos.x += playerChunk.x;
-                    pos.z += playerChunk.z;
-                    pos *= BasicComputeTest.chunkSize;
+            pos.x += playerChunk.x;
+            pos.z += playerChunk.z;
+            pos *= Chunk.chunkSize;
                     
-                    if (chunks.ContainsKey(pos))
-                    {
-                        continue;
-                    }
-                    GameObject chunk;
-                    if (reusableChunks.Count > 0)
-                    {
-                        chunk = reusableChunks.Dequeue();
-                    //    if (chunk.GetComponent<BasicComputeTest>().chunkOffset == pos)
-                    //    {
-                    //        chunks.Add(pos, chunk);
-                    //        continue;
-                    //    } 
-                    }
-                    else
-                    {
-                        chunk = Instantiate(obj);
-                    }
+            if (chunks.ContainsKey(pos))
+            {
+                continue;
+            }
+            GameObject chunk;
+            if (reusableChunks.Count > 0)
+            {
+                chunk = reusableChunks.Dequeue();
+                if (chunk.GetComponent<Chunk>().chunkOffset == pos)
+                {
                     chunks.Add(pos, chunk);
-                    chunk.transform.position = pos;
-                    chunk.GetComponent<BasicComputeTest>().Init(queue, pos);
-                    
-                    
-                
-                    yield return null; 
+                    continue;
+                } 
+            }
+            else
+            {
+                chunk = Instantiate(obj);
             }
             
+            chunks.Add(pos, chunk);
+            chunk.transform.position = pos; 
+            chunk.GetComponent<Chunk>().Init(pos);
+
+            yield return null;
         }
-        
 
         yield return null;
     }
@@ -105,14 +91,14 @@ public class World : MonoBehaviour
 
     void Generate()
     { 
-        StopCoroutine("Gogo");
-        StartCoroutine(Gogo());
+        StopCoroutine(nameof(Reload));
+        StartCoroutine(Reload());
     }
 
     Vector3Int positionToChunk(Vector3 position)
     {
         Vector3 chunkPos = new Vector3(position.x, 0, position.z);
-        chunkPos /= (float)(BasicComputeTest.chunkSize);
+        chunkPos /= (float)(Chunk.chunkSize);
         chunkPos.x = Mathf.Floor(chunkPos.x);
         chunkPos.z = Mathf.Floor(chunkPos.z);
 

@@ -7,7 +7,8 @@ using UnityEngine;
 using UnityEngine.Profiling;
 using UnityEngine.Rendering;
 
-public class BasicComputeTest : MonoBehaviour
+
+public class Chunk : MonoBehaviour
 {
     enum State
     {
@@ -30,17 +31,16 @@ public class BasicComputeTest : MonoBehaviour
     private ComputeBuffer countBuffer; 
     
     private GameObject myQuad;
-    private bool quadInitialized = false;
+    private bool quadInitialized;
     private int kernel;
 
     private Vector3[] output;
 
     private GameObject[] spheres;
     private AsyncGPUReadbackRequest request;
-    private CoroutineQueue queue;
     private bool initialized = false;
     public Vector3Int chunkOffset;
-    private bool destroyed = false;
+    private bool destroyed;
 
     private static Byte[] clearArray = new Byte[1];
     
@@ -54,11 +54,7 @@ public class BasicComputeTest : MonoBehaviour
     {
         Air,
         Grass, 
-        Dirt, 
-        Stone,
-        Diamond,
-        RedStone,
-        Bedrock,
+        Dirt
     }
     
     private Vector2[,] blockUVs =
@@ -112,9 +108,8 @@ public class BasicComputeTest : MonoBehaviour
         
     }
 
-    public void Init(CoroutineQueue q, Vector3Int offset)
+    public void Init(Vector3Int offset)
     {
-        queue = q;
         chunkOffset = offset;
         state = State.Starting;
         MeshFilter f;
@@ -173,9 +168,7 @@ public class BasicComputeTest : MonoBehaviour
         {
             numQuads += voxels[i].num_faces;
         }
-
         
-
         var p0 = new Vector3(-0.5f, -0.5f, 0.5f);
         var p1 = new Vector3(0.5f, -0.5f, 0.5f);
         var p2 = new Vector3(0.5f, -0.5f, -0.5f);
@@ -199,8 +192,6 @@ public class BasicComputeTest : MonoBehaviour
         for (int i = 0; i < num_voxels; i++)
         {
             var voxel = voxels[i];
-
-
             
             if (voxel.num_faces == 0) break;
 

@@ -1,0 +1,5 @@
+#define UNDEFINED -1
+#define AIR 0
+#define GRASS 1
+#define DIRT 2
+#define STONE 3

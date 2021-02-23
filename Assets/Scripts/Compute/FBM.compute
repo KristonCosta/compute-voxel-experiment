@@ -1,15 +1,11 @@
 // Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel Basic
 #include "Include/Noise2D.compute"
+#include "Include/BlockTypes.compute"
 #ifdef GL_ES
 precision highp float;
 #endif
 
-#define UNDEFINED -1
-#define AIR 0
-#define GRASS 1
-#define DIRT 2
-#define STONE 3
 
 RWStructuredBuffer<uint> points;
 uint size_of_chunk;
@@ -85,7 +81,7 @@ void Basic(uint3 id : SV_DispatchThreadID)
     }
     float3 translated = id + offset;
     uint result = UNDEFINED;
-    result = fractal_brownian_motion_3d(translated, 0.1, 3) < -0.42f ? AIR : result;
+    result = fractal_brownian_motion_3d(translated, 0.005, 3) < 0.46f ? AIR : result;
     if (result == UNDEFINED)
     {
         uint height = generate_stone_height(translated.xz);

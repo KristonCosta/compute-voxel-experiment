@@ -17,26 +17,15 @@ public class FlyCamera : MonoBehaviour {
 	public float mainSpeed = 100.0f; //regular speed
 	public float shiftAdd = 250.0f; //multiplied by how long shift is held.  Basically running
 	public float maxShift = 1000.0f; //Maximum speed when holdin gshift
-	public float camSens = 0.25f; //How sensitive it with mouse
-	public bool rotateOnlyIfMousedown = true;
-	public bool movementStaysFlat = true;
-    private float rotationX = 0.0f;
+	private float rotationX = 0.0f;
     private float rotationY = 0.0f;
-
-    public float climbSpeed = 4;
-    public float slowMoveFactor = 0.25f;
-    public float normalMoveSpeed = 10;
-    public float fastMoveFactor = 3;
+    
     public float cameraSensitivity = 90;
-
-	private Vector3 lastMouse = new Vector3(255, 255, 255); //kind of in the middle of the screen, rather than at the top (play)
+    
 	private float totalRun= 1.0f;
-
-	private Rigidbody rb;
 
 	private void Start()
 	{
-		rb = GetComponent<Rigidbody>();
 		Cursor.lockState = CursorLockMode.Locked;
 	}
 	
@@ -64,8 +53,8 @@ public class FlyCamera : MonoBehaviour {
 			totalRun = Mathf.Clamp(totalRun * 0.5f, 1f, 1000f);
 			p = p * mainSpeed;
 		}
-		
-		rb.AddForce(p, ForceMode.VelocityChange);
+
+		transform.position += p * Time.deltaTime;
 
 
         if (Input.GetKeyDown (KeyCode.End))

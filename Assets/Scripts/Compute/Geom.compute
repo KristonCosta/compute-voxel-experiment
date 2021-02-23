@@ -3,6 +3,7 @@
 #ifdef GL_ES
 precision mediump float;
 #endif
+#include "Include/BlockTypes.compute"
 
 static const uint3 normals[6] = {
     uint3(0, 1, 0),
@@ -59,7 +60,7 @@ FaceInfo add_direction_if_valid(uint3 id, int dir, FaceInfo current_val)
         adj_block.z < size_of_chunk &&
         adj_block.y < height_of_chunk) {
         int adjacent_index = index_from_coord(adj_block);
-        if (points[adjacent_index] > 0)
+        if (points[adjacent_index] > AIR)
         {
             return current_val;
         }
@@ -80,7 +81,7 @@ void Gen(uint3 id : SV_DispatchThreadID)
     }
 
     uint block_type = points[index_from_coord(id)];
-    if (block_type <= 0)
+    if (block_type <= AIR)
     {
         return;
     }
