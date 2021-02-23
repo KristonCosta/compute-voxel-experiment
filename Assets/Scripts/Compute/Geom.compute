@@ -4,13 +4,13 @@
 precision mediump float;
 #endif
 
-static const float3 normals[6] = {
-    float3(0, 1, 0),
-    float3(0, -1, 0),
-    float3(-1, 0, 0),
-    float3(1, 0, 0),
-    float3(0, 0, 1),
-    float3(0, 0, -1)
+static const uint3 normals[6] = {
+    uint3(0, 1, 0),
+    uint3(0, -1, 0),
+    uint3(-1, 0, 0),
+    uint3(1, 0, 0),
+    uint3(0, 0, 1),
+    uint3(0, 0, -1)
 };
 
 static const uint quad_config[6][5] = {
@@ -35,23 +35,24 @@ static const uint face_conf[6] = {
 struct FaceInfo
 {
     uint3 coord;
+    uint block_type;
     uint visible_faces;
     uint num_faces;
 };
 
 uint size_of_chunk;
 AppendStructuredBuffer<FaceInfo> face_info;
-RWStructuredBuffer<float> points;
+RWStructuredBuffer<uint> points;
 uint height_of_chunk;
 
 uint index_from_coord(uint3 coord) {
     return coord.z * height_of_chunk * size_of_chunk + coord.y * size_of_chunk + coord.x;
 }
-
+ 
 FaceInfo add_direction_if_valid(uint3 id, int dir, FaceInfo current_val)
 {
-    float3 normal = normals[dir];
-    float3 adj_block = id + normal;
+    uint3 normal = normals[dir];
+    uint3 adj_block = id + normal;
     
     if (all(adj_block >= 0) &&
         adj_block.x < size_of_chunk &&
@@ -78,7 +79,8 @@ void Gen(uint3 id : SV_DispatchThreadID)
         return;
     }
 
-    if (points[index_from_coord(id)] <= 0)
+    uint block_type = points[index_from_coord(id)];
+    if (block_type <= 0)
     {
         return;
     }
@@ -87,6 +89,7 @@ void Gen(uint3 id : SV_DispatchThreadID)
     info.coord = id;
     info.num_faces = 0;
     info.visible_faces = 0x0;
+    info.block_type = block_type;
     info = add_direction_if_valid(id, 0, info);
     info = add_direction_if_valid(id, 1, info);
     info = add_direction_if_valid(id, 2, info);

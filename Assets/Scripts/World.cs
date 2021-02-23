@@ -12,12 +12,14 @@ public class World : MonoBehaviour
     public GameObject player;
     public Vector3Int playerChunk;
     public Dictionary<Vector3Int, GameObject> chunks = new Dictionary<Vector3Int, GameObject>();
-    public Stack<GameObject> reusableChunks = new Stack<GameObject>();
+    public Queue<GameObject> reusableChunks = new Queue<GameObject>();
     private CoroutineQueue queue;
+    
     private const int radius = 10;
     IEnumerator Gogo()
     {
         
+        var chunkQueue = new SortedList();
         var old = chunks.Keys.ToList();
         var currentChunks = new HashSet<Vector3Int>();
         for (int i = -radius; i <= radius; i++)
@@ -29,7 +31,7 @@ public class World : MonoBehaviour
                     var pos = rad + playerChunk;
                     pos *= BasicComputeTest.chunkSize;
                     currentChunks.Add(pos);
-                    
+                    chunkQueue.Add(pos.sqrMagnitude, pos);
             }
         }
 
@@ -37,9 +39,15 @@ public class World : MonoBehaviour
         {
             if (!currentChunks.Contains(key))
             { 
-                reusableChunks.Push(chunks[key]);
+                reusableChunks.Enqueue(chunks[key]);
                 chunks.Remove(key);
             }
+        }
+
+        int index = 0;
+        while (index < chunkQueue.Count)
+        {
+            
         }
 
         for (int i = -radius; i <= radius; i++)
@@ -64,7 +72,7 @@ public class World : MonoBehaviour
                     GameObject chunk;
                     if (reusableChunks.Count > 0)
                     {
-                        chunk = reusableChunks.Pop();
+                        chunk = reusableChunks.Dequeue();
                     //    if (chunk.GetComponent<BasicComputeTest>().chunkOffset == pos)
                     //    {
                     //        chunks.Add(pos, chunk);
@@ -81,8 +89,9 @@ public class World : MonoBehaviour
                     
                     
                 
-                yield return null;
+                    yield return null; 
             }
+            
         }
         
 

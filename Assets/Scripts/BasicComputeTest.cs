@@ -17,7 +17,7 @@ public class BasicComputeTest : MonoBehaviour
         Done
     }
 
-    public const int chunkSize = 16;
+    public const int chunkSize = 32;
     public const int chunkHeight = 256;
     private State state = State.Waiting; 
     public ComputeShader shader;
@@ -41,12 +41,57 @@ public class BasicComputeTest : MonoBehaviour
     private bool initialized = false;
     public Vector3Int chunkOffset;
     private bool destroyed = false;
-    
+
+    private static Byte[] clearArray = new Byte[1];
     
     private readonly Vector2 uv00 = new Vector2(0f, 0f);
     private readonly Vector2  uv10 = new Vector2(1f, 0f);
     private readonly Vector2  uv01 = new Vector2(0f, 1f);
     private readonly Vector2  uv11 = new Vector2(1f, 1f);
+    
+    
+    public enum BlockType
+    {
+        Air,
+        Grass, 
+        Dirt, 
+        Stone,
+        Diamond,
+        RedStone,
+        Bedrock,
+    }
+    
+    private Vector2[,] blockUVs =
+    {
+        {
+            new Vector2(0.125f, 0.375f), new Vector2(0.1875f, 0.375f),
+            new Vector2(0.125f, 0.4375f), new Vector2(0.1875f, 0.4375f)
+        },
+        {
+            new Vector2(0.1875f, 0.9375f), new Vector2(0.25f, 0.9375f),
+            new Vector2(0.1875f, 1.0f), new Vector2(0.25f, 1.0f)
+        }, 
+        {
+            new Vector2(0.125f, 0.9375f), new Vector2(0.1875f, 0.9375f),
+            new Vector2(0.125f, 1.0f), new Vector2(0.1875f, 1.0f)
+        }, 
+        {
+            new Vector2(0f, 0.875f), new Vector2(0.0625f, 0.875f),
+            new Vector2(0f, 0.9375f), new Vector2(0.0625f, 0.9375f)
+        }, 
+        {
+            new Vector2(0.125f, 0.75f), new Vector2(0.1875f, 0.75f),
+            new Vector2(0.125f, 0.8125f), new Vector2(0.1875f, 0.8125f)
+        },
+        {
+            new Vector2(0.1825f, 0.75f), new Vector2(0.25f, 0.75f),
+            new Vector2(0.1875f, 0.8125f), new Vector2(0.25f, 0.8125f)
+        },
+        {
+            new Vector2(0.0625f, 0.875f), new Vector2(0.125f, 0.875f),
+            new Vector2(0.0625f, 0.9375f), new Vector2(0.125f, 0.9375f)
+        },
+    };
     
     // Start is called before the first frame update
     public void Start()
@@ -54,12 +99,16 @@ public class BasicComputeTest : MonoBehaviour
         int sizeOfChunk = chunkSize + 2;
         int numVoxels = sizeOfChunk * sizeOfChunk * (chunkHeight + 2);
         int maxQuadCount = numVoxels;
-        pointsBuffer = new ComputeBuffer(numVoxels, sizeof(float));
+        var stride = (sizeof(int) * 3 + sizeof(uint) * 3);
+        if (clearArray.Length < 2)
+        {
+            clearArray = new Byte[maxQuadCount * stride];
+        }
+        pointsBuffer = new ComputeBuffer(numVoxels, sizeof(uint));
         pointsBuffer.SetCounterValue(0);
-        faceInfoBuffer = new ComputeBuffer(maxQuadCount, sizeof(int) * 3 + sizeof(uint) * 2, ComputeBufferType.Append);
+        faceInfoBuffer = new ComputeBuffer(maxQuadCount, stride, ComputeBufferType.Append);
         faceInfoBuffer.SetCounterValue(0);
         countBuffer = new ComputeBuffer(1, sizeof(int), ComputeBufferType.IndirectArguments);
-        
         
     }
 
@@ -83,6 +132,8 @@ public class BasicComputeTest : MonoBehaviour
         faceInfoBuffer.SetCounterValue(0);
         kernel = shader.FindKernel("Basic");
 
+        faceInfoBuffer.SetData(clearArray);
+        
         shader.SetBuffer(kernel, "points", pointsBuffer);
         shader.SetInt("size_of_chunk", sizeOfChunk);
         shader.SetInt("height_of_chunk", chunkHeight + 2);
@@ -108,16 +159,8 @@ public class BasicComputeTest : MonoBehaviour
 
     private void LoadRequest()
     {
-        ComputeBuffer.CopyCount(faceInfoBuffer, countBuffer, 0);
-        int[] num_voxels_arr = new int[1] { 0 };
-        countBuffer.GetData(num_voxels_arr);
-        int num_voxels = num_voxels_arr[0];
-        
-        if (num_voxels == 0)
-        {
-            state = State.Done;
-            return;
-        }
+        int num_voxels = chunkHeight * chunkSize * chunkSize;
+ 
         var voxels = request.GetData<FaceInfo>();
         
         if (destroyed)
@@ -170,7 +213,7 @@ public class BasicComputeTest : MonoBehaviour
                 vertices[vertex_offset + 3] = p4 + voxel.coordinate;
 
                 generate_normals(normal_offset, Vector3.up, normals);
-                generate_uvs(uv_offset, uvs);
+                generate_uvs(uv_offset, uvs, (BlockType) voxel.block_type, 0);
                 generate_triangles(triangle_offset, vertex_offset, meshTriangles);
 
                 vertex_offset += 4;
@@ -189,7 +232,7 @@ public class BasicComputeTest : MonoBehaviour
                 vertices[vertex_offset + 3] = p3 + voxel.coordinate;
 
                 generate_normals(normal_offset, Vector3.down, normals);
-                generate_uvs(uv_offset, uvs);
+                generate_uvs(uv_offset, uvs, (BlockType) voxel.block_type, 1);
                 generate_triangles(triangle_offset, vertex_offset, meshTriangles);
 
                 vertex_offset += 4;
@@ -208,7 +251,7 @@ public class BasicComputeTest : MonoBehaviour
                 vertices[vertex_offset + 3] = p3 + voxel.coordinate;
 
                 generate_normals(normal_offset, Vector3.left, normals);
-                generate_uvs(uv_offset, uvs);
+                generate_uvs(uv_offset, uvs, (BlockType) voxel.block_type, 2);
                 generate_triangles(triangle_offset, vertex_offset, meshTriangles);
 
                 vertex_offset += 4;
@@ -227,7 +270,7 @@ public class BasicComputeTest : MonoBehaviour
                 vertices[vertex_offset + 3] = p1 + voxel.coordinate;
 
                 generate_normals(normal_offset, Vector3.right, normals);
-                generate_uvs(uv_offset, uvs);
+                generate_uvs(uv_offset, uvs, (BlockType) voxel.block_type, 3);
                 generate_triangles(triangle_offset, vertex_offset, meshTriangles);
 
                 vertex_offset += 4;
@@ -246,7 +289,7 @@ public class BasicComputeTest : MonoBehaviour
                 vertices[vertex_offset + 3] = p0 + voxel.coordinate;
 
                 generate_normals(normal_offset, Vector3.forward, normals);
-                generate_uvs(uv_offset, uvs);
+                generate_uvs(uv_offset, uvs, (BlockType) voxel.block_type, 4);
                 generate_triangles(triangle_offset, vertex_offset, meshTriangles);
 
                 vertex_offset += 4;
@@ -265,7 +308,7 @@ public class BasicComputeTest : MonoBehaviour
                 vertices[vertex_offset + 3] = p2 + voxel.coordinate;
 
                 generate_normals(normal_offset, Vector3.back, normals);
-                generate_uvs(uv_offset, uvs);
+                generate_uvs(uv_offset, uvs, (BlockType) voxel.block_type, 5);
                 generate_triangles(triangle_offset, vertex_offset, meshTriangles);
 
                 vertex_offset += 4;
@@ -309,8 +352,9 @@ public class BasicComputeTest : MonoBehaviour
         mesh.triangles = meshTriangles;
         mesh.normals = normals;
         mesh.uv = uvs;
+        mesh.Optimize();
         mesh.RecalculateBounds();
-        filter.mesh = mesh;
+        filter.mesh = mesh; 
         meshCollider.sharedMesh = filter.mesh;
         state = State.Done;
     }
@@ -323,12 +367,35 @@ public class BasicComputeTest : MonoBehaviour
         }
     }
 
-    private void generate_uvs(int offset, Vector2[] uvs)
+    private void generate_uvs(int offset, Vector2[] uvs, BlockType blockType, uint side)
     {
         uvs[offset] = uv11;
         uvs[offset + 1] = uv01;
         uvs[offset + 2] = uv00;
         uvs[offset + 3] = uv10;
+        
+        if (blockType == BlockType.Grass && side == 0)
+        {
+            uvs[offset] = blockUVs[0, 3];
+            uvs[offset+1] = blockUVs[0, 2];
+            uvs[offset+2] = blockUVs[0, 0];
+            uvs[offset+3] = blockUVs[0, 1];
+        }
+        
+        else if (blockType == BlockType.Grass && side == 1)
+        {
+            uvs[offset] = blockUVs[(int)(BlockType.Dirt), 3];
+            uvs[offset+1] = blockUVs[(int)(BlockType.Dirt), 2];
+            uvs[offset+2] = blockUVs[(int)(BlockType.Dirt), 0];
+            uvs[offset+3] = blockUVs[(int)(BlockType.Dirt), 1];    
+        }
+        else
+        {
+            uvs[offset] = blockUVs[(int)(blockType), 3];
+            uvs[offset+1] = blockUVs[(int)(blockType), 2];
+            uvs[offset+2] = blockUVs[(int)(blockType), 0];
+            uvs[offset+3] = blockUVs[(int)(blockType), 1];   
+        }
     }
     
     private void generate_triangles(int offset, int vert_offset, int[] triangles)
@@ -375,6 +442,7 @@ public class BasicComputeTest : MonoBehaviour
     struct FaceInfo
     {
         public Vector3Int coordinate;
+        public uint block_type;
         public uint faces;
         public uint num_faces;
     }
