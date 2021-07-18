@@ -14,7 +14,7 @@ public class World : MonoBehaviour
     public Queue<GameObject> reusableChunks = new Queue<GameObject>();
     private CoroutineQueue queue;
     
-    private const int radius = 10;
+    private const int radius = 8;
     IEnumerator Reload()
     {
         var chunkQueue = new SimplePriorityQueue<Vector3Int, int>();
